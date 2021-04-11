@@ -26,7 +26,10 @@ class Bot(lightbulb.Bot):
         positional_args, remainder = sv.deconstruct_str(max_parse=command.arg_details.maximum_arguments)
         if remainder and command.arg_details.kwarg_name is None and not command._allow_extra_arguments:
             raise lightbulb.errors.TooManyArguments(command)
-        if (len(positional_args) + bool(remainder)) < command.arg_details.minimum_arguments:
+        if (
+            (len(positional_args) + bool(remainder)) < command.arg_details.minimum_arguments
+            and not (hasattr(command, "flags") and command.flags)
+        ):
             missing_args = command.arg_details.get_missing_args([*positional_args, *([remainder] if remainder else [])])
             raise lightbulb.errors.NotEnoughArguments(command, missing_args)
 
@@ -35,7 +38,7 @@ class Bot(lightbulb.Bot):
         if remainder and command.arg_details.kwarg_name is not None:
             remainder = {command.arg_details.kwarg_name: remainder}
 
-        if isinstance(command, Command) and command.flags:
+        if isinstance(command, Command) and command.flags and remainder:
             flags = {}
             index = 0
             sv = lightbulb.StringView(remainder)
@@ -93,7 +96,7 @@ class Bot(lightbulb.Bot):
         args: typing.Sequence[str],
         kwarg: typing.Mapping[str, str],
     ) -> None:
-        if kwarg:
+        if kwarg or (hasattr(command, "flags") and command.flags):
             await command.invoke(context, *args, **kwarg)
         elif args:
             await command.invoke(context, *args)
