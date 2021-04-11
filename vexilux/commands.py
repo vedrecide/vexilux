@@ -1,7 +1,20 @@
+import attr
 import typing
 import inspect
-from lightbulb import get_command_signature, Context
+from lightbulb import get_command_signature, Context, WrappedArg
 from lightbulb import Command as _Command, Group as _Group
+
+T_converter = typing.Callable[[typing.Union[str, WrappedArg]], typing.Any]
+
+@attr.s
+class FlagDetails:
+    """
+    Dataclass holding information for a flag
+    """
+
+    name: str = attr.ib()
+    converter: T_converter = attr.ib()
+    greedy: bool = attr.ib()
 
 class Command(_Command):
     def __init__(self, *args, **kwargs) -> None:
@@ -59,3 +72,32 @@ class Command(_Command):
 
 class Group(_Group, Command):
     pass
+
+def add_argument(
+    name: str,
+    aliases: typing.List[str],
+    /,
+    *,
+    converter: T_converter=str,
+    greedy: bool=False
+):
+    """
+    Decorator to add a flag argument to a command
+
+    Args:
+        - name: The name of the argument through which you can access it's value later on
+        - aliases: A list of aliases that should be listened to
+        - converter: A built-in type or a function that takes lightbulb.WrappedArg as argument, defaults to str
+        - greedy: Whether to count all arguments of a flag as one string, defaults to False
+    """
+    def decorate(command: typing.Union[Command, Group]):
+        command.flags.append(
+            {
+                alias: FlagDetails(name, converter, greedy)
+                for alias in aliases
+            }
+        )
+
+        return command
+
+    return decorate

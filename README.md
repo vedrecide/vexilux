@@ -6,15 +6,15 @@
 
 **Example:**
 ```py
-from vexilux import Bot, Command
+from vexilux import Bot, Command, add_argument
 from lightbulb import member_converter, Context
 
 config = {...}
 
 bot = Bot(**config)
 
-@bot.add_argument("users", ["--users", "-u"], converter=member_converter)
-@bot.add_argument("reason", ["--reason", "-r"], greedy=True)
+@add_argument("users", ["--users", "-u"], converter=member_converter)
+@add_argument("reason", ["--reason", "-r"], greedy=True)
 @bot.command(cls=Command)
 async def ban(ctx: Context, **options) -> None:
     reason = options.get("reason", "No reason available")
@@ -26,7 +26,7 @@ async def ban(ctx: Context, **options) -> None:
 
 # Documentation
 
-## `vexilux.Bot.add_argument`
+## `vexilux.commands.add_argument`
 
 The `add_argument` method takes 4 arguments.
 - `name`: The name of the argument through which you can access it's value later on

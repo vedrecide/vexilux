@@ -1,20 +1,9 @@
-import attr
 import typing
 import hikari
 import lightbulb
 from .commands import Command, Group
 
 T_converter = typing.Callable[[typing.Union[str, lightbulb.WrappedArg]], typing.Any]
-
-@attr.s
-class FlagDetails:
-    """
-    Dataclass holding information for a flag
-    """
-
-    name: str = attr.ib()
-    converter: T_converter = attr.ib()
-    greedy: bool = attr.ib()
 
 class Bot(lightbulb.Bot):
     """
@@ -187,33 +176,3 @@ class Bot(lightbulb.Bot):
             await after_invoke(context)
 
         await self.dispatch(lightbulb.CommandCompletionEvent(app=self, command=command, context=context))
-
-    def add_argument(
-        self,
-        name: str,
-        aliases: typing.List[str],
-        /,
-        *,
-        converter: T_converter=str,
-        greedy: bool=False
-    ):
-        """
-        Decorator to add a flag argument to a command
-
-        Args:
-            - name: The name of the argument through which you can access it's value later on
-            - aliases: A list of aliases that should be listened to
-            - converter: A built-in type or a function that takes lightbulb.WrappedArg as argument, defaults to str
-            - greedy: Whether to count all arguments of a flag as one string, defaults to False
-        """
-        def decorate(command: typing.Union[Command, Group]):
-            command.flags.append(
-                {
-                    alias: FlagDetails(name, converter, greedy)
-                    for alias in aliases
-                }
-            )
-
-            return command
-
-        return decorate
