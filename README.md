@@ -20,7 +20,7 @@ async def ban(ctx: Context, **options) -> None:
     reason = options.get("reason", "No reason available")
     users = ", ".join(user.username for user in options.get("users"))
     await ctx.respond(
-        f"Successfully banned {users} for the reason: {reason}
+        f"Successfully banned {users} for the reason: {reason}"
     )
 ```
 
