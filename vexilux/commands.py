@@ -1,4 +1,5 @@
 import typing
+import inspect
 from lightbulb import get_command_signature, Context
 from lightbulb import Command as _Command, Group as _Group
 
@@ -10,10 +11,20 @@ class Command(_Command):
     
     @property
     def signature(self) -> str:
-        if not self.flags:
-            return get_command_signature(self)
-
         signature_elements = [self.qualified_name]
+
+        for argname, arginfo in self.arg_details.args.items():
+            if arginfo.ignore:
+                continue
+
+            if arginfo.argtype in (inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.VAR_KEYWORD) and self.flags:
+                break
+
+            if arginfo.default is inspect.Parameter.empty:
+                signature_elements.append(f"<{argname}>")
+
+            else:
+                signature_elements.append(f"[{argname}={arginfo.default}]")
 
         for flag in self.flags:
             aliases = " | ".join(
