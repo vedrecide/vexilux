@@ -46,7 +46,7 @@ class Bot(lightbulb.Bot):
         if remainder and command.arg_details.kwarg_name is not None:
             remainder = {command.arg_details.kwarg_name: remainder}
 
-        if isinstance(command, Command):
+        if isinstance(command, Command) and command.flags:
             flags = {}
             index = 0
             sv = lightbulb.StringView(remainder)
