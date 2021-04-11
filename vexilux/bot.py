@@ -2,6 +2,9 @@ import attr
 import typing
 import hikari
 import lightbulb
+from .commands import Command, Group
+
+T_converter = typing.Callable[[typing.Union[str, lightbulb.WrappedArg]], typing.Any]
 
 @attr.s
 class FlagDetails:
@@ -10,7 +13,7 @@ class FlagDetails:
     """
 
     name: str = attr.ib()
-    converter: typing.Callable[[typing.Union[str, lightbulb.WrappedArg]], typing.Any] = attr.ib()
+    converter: T_converter = attr.ib()
     greedy: bool = attr.ib()
 
 class Bot(lightbulb.Bot):
@@ -18,8 +21,17 @@ class Bot(lightbulb.Bot):
     A subclass of lightbulb.Bot that allows CLI-like argument parsing
     """
 
+    async def _convert_flag_arg(self, context: lightbulb.Context, arg: str, converter: T_converter) -> typing.Any:
+        if isinstance(converter, type):
+            converted_arg = converter(arg)
+
+        else:
+            converted_arg = await converter(lightbulb.WrappedArg(arg, context))
+
+        return converted_arg
+
     async def resolve_args_for_command(
-        self, context: lightbulb.Context, command: lightbulb.Command, raw_arg_string: str
+        self, context: lightbulb.Context, command: typing.Union[lightbulb.Command, Command], raw_arg_string: str
     ) -> typing.Tuple[typing.List[str], typing.Dict[str, str]]:
         sv = lightbulb.StringView(raw_arg_string)
         positional_args, remainder = sv.deconstruct_str(max_parse=command.arg_details.maximum_arguments)
@@ -34,64 +46,58 @@ class Bot(lightbulb.Bot):
         if remainder and command.arg_details.kwarg_name is not None:
             remainder = {command.arg_details.kwarg_name: remainder}
 
-        flags = {}
-        index = 0
-        sv = lightbulb.StringView(remainder)
-        args, _ = sv.deconstruct_str()
-        while index < len(args):
-            element = args[index]
-            flag_details = command.flags.get(element)
-            if not flag_details:
-                index += 1
-                continue
+        if isinstance(command, Command):
+            flags = {}
+            index = 0
+            sv = lightbulb.StringView(remainder)
+            args, _ = sv.deconstruct_str()
 
-            index += 1
+            command_flags = {
+                alias: details
+                for flag in command.flags
+                for alias, details in flag.items()
+            }
 
-            flag_args = []
-            if not index >= len(args):
+            while index < len(args):
                 element = args[index]
-                while element not in command.flags:
-                    flag_args.append(element)
-                    index += 1
-                    if index >= len(args):
-                        break
+                flag_details = command_flags.get(element)
+                index += 1
 
+                if not flag_details:
+                    continue
+
+                flag_args = []
+                if not index >= len(args):
                     element = args[index]
+                    while element not in command_flags:
+                        flag_args.append(element)
+                        index += 1
+                        if index >= len(args):
+                            break
 
-                if flag_details.greedy:
-                    flag_args = [" ".join(flag_args)]
+                        element = args[index]
 
-            converted_flag_args = []
+                    if flag_details.greedy:
+                        flag_args = " ".join(flag_args)
 
-            for arg in flag_args:
-                if isinstance(flag_details.converter, type):
-                    converted_arg = flag_details.converter(arg)
+                if isinstance(flag_args, list):
+                    converted_flag_args = []
 
-                else:
-                    converted_arg = await flag_details.converter(lightbulb.WrappedArg(arg, context))
+                    for arg in flag_args:
+                        converted_arg = await self._convert_flag_arg(context, arg, flag_details.converter)
 
-                converted_flag_args.append(converted_arg)
+                        converted_flag_args.append(converted_arg)
 
-            flags[flag_details.name] = converted_flag_args
+                elif isinstance(flag_args, str):
+                    converted_flag_args = await self._convert_flag_arg(context, flag_args, flag_details.converter)
 
-        return positional_args, flags
+                flags[flag_details.name] = converted_flag_args
 
-    async def invoke_command(
-        self,
-        command: lightbulb.Command,
-        context: lightbulb.Context, 
-        *args: str, **kwargs: str
-    ) -> typing.Any:
-        if command.cooldown_manager is not None:
-            command.cooldown_manager.add_cooldown(context)
+            remainder = flags
 
-        arg_details = list(command.arg_details.args.values())[1 : len(args) + 1]
-        new_args = await command._convert_args(context, args[: len(arg_details)], arg_details)
-        new_args = [*new_args, *args[len(arg_details) :]]
+        return positional_args, remainder
 
-        return await command._callback(context, *new_args, **kwargs)
-
-    async def _pass_args_to_invocation(
+    async def _invoke_command(
         self,
         command: lightbulb.Command,
         context: lightbulb.Context,
@@ -99,11 +105,11 @@ class Bot(lightbulb.Bot):
         kwarg: typing.Mapping[str, str],
     ) -> None:
         if kwarg:
-            await self.invoke_command(command,context, *args, **kwarg)
+            await command.invoke(context, *args, **kwarg)
         elif args:
-            await self.invoke_command(command, context, *args)
+            await command.invoke(context, *args)
         else:
-            await self.invoke_command(command, context)
+            await command.invoke(context)
 
     async def process_commands_for_event(self, event: hikari.MessageCreateEvent) -> None:
         """
@@ -168,7 +174,7 @@ class Bot(lightbulb.Bot):
             return
 
         try:
-            await self._pass_args_to_invocation(command, context, positional_args, keyword_arg)
+            await self._invoke_command(command, context, positional_args, keyword_arg)
         except lightbulb.errors.CommandError as ex:
             await self._dispatch_command_error_event_from_exception(ex, event.message, context, command)
             return
@@ -188,7 +194,7 @@ class Bot(lightbulb.Bot):
         aliases: typing.List[str],
         /,
         *,
-        converter: typing.Callable[[typing.Union[str, lightbulb.WrappedArg]], typing.Any]=str,
+        converter: T_converter=str,
         greedy: bool=False
     ):
         """
@@ -198,14 +204,15 @@ class Bot(lightbulb.Bot):
             - name: The name of the argument through which you can access it's value later on
             - aliases: A list of aliases that should be listened to
             - converter: A built-in type or a function that takes lightbulb.WrappedArg as argument, defaults to str
-            - greedy: Whether to count all arguments of a flag as one string
+            - greedy: Whether to count all arguments of a flag as one string, defaults to False
         """
-        def decorate(command: lightbulb.Command):
-            if not hasattr(command, "flags"):
-                setattr(command, "flags", {})
-
-            for alias in aliases:
-                command.flags[alias] = FlagDetails(name, converter, greedy)
+        def decorate(command: typing.Union[Command, Group]):
+            command.flags.append(
+                {
+                    alias: FlagDetails(name, converter, greedy)
+                    for alias in aliases
+                }
+            )
 
             return command
 
