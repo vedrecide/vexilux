@@ -1,3 +1,4 @@
 .vscode
 test_bot.py
+test_bot_plugin.py
 __pycache__/
