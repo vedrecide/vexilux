@@ -93,7 +93,7 @@ class Command(_Command):
                     flag, key=lambda alias: len(alias)
                 )
             )
-            flag_signature = f"{aliases} [...]"
+            flag_signature = f"[ {aliases} ... ]"
             signature_elements.append(flag_signature)
 
         return " ".join(signature_elements)
