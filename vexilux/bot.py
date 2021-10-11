@@ -23,7 +23,7 @@ class Bot(lightbulb.Bot):
         self, context: lightbulb.Context, command: typing.Union[lightbulb.Command, Command], raw_arg_string: str
     ) -> typing.Tuple[typing.List[str], typing.Dict[str, str]]:
         sv = lightbulb.StringView(raw_arg_string)
-        positional_args, remainder = sv.deconstruct_str(max_parse=command.arg_details.maximum_arguments)
+        positional_args, remainder = sv.deconstruct_str(max_parse=len(command.arg_details.arguments))
         if remainder and command.arg_details.kwarg_name is None and not command._allow_extra_arguments:
             raise lightbulb.errors.TooManyArguments(command)
         if (
